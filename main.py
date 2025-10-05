@@ -1,6 +1,32 @@
 import pandas as pd
 import matplotlib.pyplot as plt
-f = input("Enter the file name: ")
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
+from reportlab.lib.styles import getSampleStyleSheet
+import os
+
+f = input("Enter the file name (with .csv): ")
+
+def generate_pdf_report(summary_text, chart_paths, output_filename="sales_report.pdf"):
+    """Generate a PDF with summary text and chart images."""
+    doc = SimpleDocTemplate(output_filename, pagesize=A4)
+    styles = getSampleStyleSheet()
+    story = []
+
+    story.append(Paragraph("<b>Flipkart Sales Data Report</b>", styles["Title"]))
+    story.append(Spacer(1, 12))
+    story.append(Paragraph(summary_text.replace("\n", "<br/>"), styles["Normal"]))
+    story.append(Spacer(1, 12))
+
+    for path in chart_paths:
+        if os.path.exists(path):
+            story.append(Image(path, width=400, height=250))
+            story.append(Spacer(1, 12))
+
+    doc.build(story)
+    print(f"\n✅ PDF report saved as: {output_filename}")
+
+
 def analyze_sales(file_path):
     # Load CSV
     df = pd.read_csv(file_path)
@@ -19,14 +45,18 @@ def analyze_sales(file_path):
         "Most Sold Product": df["Product Title/Description"].value_counts().idxmax()
     }
 
-    print("\n--- SALES SUMMARY ---")
+    summary_text = "\n--- SALES SUMMARY ---\n"
     for k, v in summary.items():
-        print(f"{k}: {v}")
+        summary_text += f"{k}: {v}\n"
+
+    print(summary_text)
 
     # --- RETURNS ANALYSIS ---
+    returns_summary = ""
     returns = df[df["Event Type"] == "Return"]
     if not returns.empty:
-        returns_summary = {
+        returns_summary += "\n--- RETURNS SUMMARY ---\n"
+        r_summary = {
             "Total Returns": len(returns),
             "Returned Items": returns["Item Quantity"].sum(),
             "Return Rate (%)": round((len(returns) / len(df)) * 100, 2),
@@ -34,39 +64,60 @@ def analyze_sales(file_path):
             "Top State by Returns": returns["Customer's Delivery State"].value_counts().idxmax(),
             "Most Returned Product": returns["Product Title/Description"].value_counts().idxmax()
         }
-
-        print("\n--- RETURNS SUMMARY ---")
-        for k, v in returns_summary.items():
-            print(f"{k}: {v}")
+        for k, v in r_summary.items():
+            returns_summary += f"{k}: {v}\n"
+        print(returns_summary)
     else:
-        print("\nNo returns found in this dataset.")
+        returns_summary = "\nNo returns found in this dataset."
+        print(returns_summary)
 
     # --- CHARTS ---
+    chart_paths = []
+
     # Orders by state
     orders_by_state = df["Customer's Delivery State"].value_counts()
-    orders_by_state.plot(kind="bar", figsize=(8,6), title="Orders by State")
+    plt.figure(figsize=(8,6))
+    orders_by_state.plot(kind="bar", title="Orders by State")
     plt.xlabel("State")
     plt.ylabel("Orders")
     plt.tight_layout()
-    plt.show()
+    chart1_path = "orders_by_state.png"
+    plt.savefig(chart1_path)
+    chart_paths.append(chart1_path)
+    plt.close()
 
     # Revenue trend by date
     df["Order Date"] = pd.to_datetime(df["Order Date"])
     revenue_by_date = df.groupby("Order Date")["Final Invoice Amount (Price after discount+Shipping Charges)"].sum()
-    revenue_by_date.plot(marker="o", figsize=(8,6), title="Revenue Trend by Date")
+    plt.figure(figsize=(8,6))
+    revenue_by_date.plot(marker="o", title="Revenue Trend by Date")
     plt.xlabel("Date")
     plt.ylabel("Revenue (₹)")
     plt.tight_layout()
-    plt.show()
+    chart2_path = "revenue_trend.png"
+    plt.savefig(chart2_path)
+    chart_paths.append(chart2_path)
+    plt.close()
 
-    # Top 5 products by quantity sold
+    # Top 5 products
     top_products = df.groupby("Product Title/Description")["Item Quantity"].sum().sort_values(ascending=False).head(5)
-    top_products.plot(kind="barh", figsize=(8,6), title="Top 5 Products by Quantity Sold")
+    plt.figure(figsize=(8,6))
+    top_products.plot(kind="barh", title="Top 5 Products by Quantity Sold")
     plt.xlabel("Quantity Sold")
     plt.ylabel("Product")
     plt.tight_layout()
-    plt.show()
+    chart3_path = "top_products.png"
+    plt.savefig(chart3_path)
+    chart_paths.append(chart3_path)
+    plt.close()
 
-# Run the analysis (change file path as needed)
+    # Combine summaries for PDF
+    full_summary_text = summary_text + "\n" + returns_summary
+
+    # Generate PDF
+    generate_pdf_report(full_summary_text, chart_paths)
+
+
+# Run the analysis
 if __name__ == "__main__":
     analyze_sales(f)
